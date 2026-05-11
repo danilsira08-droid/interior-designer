@@ -1,11 +1,10 @@
-// Модуль проверки норм и эргономики
+// Модуль рекомендаций по планировке
 // Источники:
 // 🔴 СП 54.13330.2022, п. 7.20 — размещение сантехники
 // 🟡 Эргономика жилого пространства — проходы и доступ
 // 🟠 Рекомендации производителей — техника и отопление
 
 const RULES = {
-  // --- НОРМАТИВНЫЕ (красные) ---
   SANITARY_ZONE: {
     id: 'SANITARY_ZONE',
     level: 'error',
@@ -13,85 +12,84 @@ const RULES = {
     sourceUrl: 'https://docs.cntd.ru/document/745881815',
     title: 'Нарушение нормы',
   },
-
-  // --- ЭРГОНОМИКА (жёлтые) ---
   MIN_PASSAGE: {
     id: 'MIN_PASSAGE',
     level: 'warning',
     source: 'Эргономика жилого пространства',
     sourceUrl: null,
-    title: 'Рекомендация по эргономике',
-  },
-  MAIN_PASSAGE: {
-    id: 'MAIN_PASSAGE',
-    level: 'warning',
-    source: 'Эргономика жилого пространства',
-    sourceUrl: null,
-    title: 'Рекомендация по эргономике',
+    title: 'Рекомендация',
   },
   DOOR_ZONE: {
     id: 'DOOR_ZONE',
     level: 'warning',
     source: 'Эргономика жилого пространства',
     sourceUrl: null,
-    title: 'Рекомендация по эргономике',
+    title: 'Рекомендация',
   },
   BED_ACCESS: {
     id: 'BED_ACCESS',
     level: 'warning',
-    source: 'Рекомендации производителей мебели',
+    source: 'Эргономика жилого пространства',
     sourceUrl: null,
-    title: 'Рекомендация по эргономике',
+    title: 'Рекомендация',
   },
   WARDROBE_ZONE: {
     id: 'WARDROBE_ZONE',
     level: 'warning',
-    source: 'Рекомендации производителей мебели',
-    sourceUrl: null,
-    title: 'Рекомендация по эргономике',
-  },
-  SOFA_ZONE: {
-    id: 'SOFA_ZONE',
-    level: 'warning',
     source: 'Эргономика жилого пространства',
-    sourceUrl: null,
-    title: 'Рекомендация по эргономике',
-  },
-
-  // --- ЗДРАВЫЙ СМЫСЛ (оранжевые) ---
-  FRIDGE_STOVE: {
-    id: 'FRIDGE_STOVE',
-    level: 'advice',
-    source: 'Рекомендации производителей бытовой техники',
     sourceUrl: null,
     title: 'Рекомендация',
   },
   RADIATOR_BLOCK: {
     id: 'RADIATOR_BLOCK',
     level: 'advice',
-    source: 'Рекомендации производителей радиаторов отопления',
+    source: 'Рекомендации по отоплению',
     sourceUrl: null,
-    title: 'Рекомендация',
+    title: 'Совет',
   },
   WINDOW_BLOCK: {
     id: 'WINDOW_BLOCK',
     level: 'advice',
-    source: 'Здравый смысл — естественное освещение',
+    source: 'Естественное освещение',
     sourceUrl: null,
-    title: 'Рекомендация',
+    title: 'Совет',
+  },
+  FRIDGE_STOVE: {
+    id: 'FRIDGE_STOVE',
+    level: 'advice',
+    source: 'Рекомендации производителей',
+    sourceUrl: null,
+    title: 'Совет',
   },
 }
 
-// Получить bounding box объекта в 2D (вид сверху)
+// Предметы которые НЕ участвуют в проверке проходов
+// (шторы, полки на стенах — они у стены и не блокируют проходы)
+const EXCLUDE_FROM_PASSAGE = [
+  'curtains',
+  'wall-shelf',
+  'shelf',
+]
+
+// Предметы сантехники
+const SANITARY_IDS = ['toilet', 'bath', 'bath-kit', 'toilet-brush', 'trash-can']
+
+// Предметы кровати
+const BED_IDS = ['bed-kingsize', 'bed-1', 'bed-2']
+
+// Предметы шкафов
+const WARDROBE_IDS = ['wardrobe-1', 'wardrobe-2']
+
+// Bounding box объекта в 2D (вид сверху) с учётом поворота
 function getBBox(item) {
   const [w, , d] = item.size
   const [x, , z] = item.position
-  const cos = Math.cos(item.rotation)
-  const sin = Math.sin(item.rotation)
+  const cos = Math.abs(Math.cos(item.rotation || 0))
+  const sin = Math.abs(Math.sin(item.rotation || 0))
 
-  // После поворота реальные размеры по осям
-  const rw = Math.abs(w * cos) + Math.abs(d * sin)
-  const rd = Math.abs(w * sin) + Math.abs(d * cos)
+  // Реальные размеры после поворота
+  const rw = w * cos + d * sin
+  const rd = w * sin + d * cos
 
   return {
     minX: x - rw / 2,
@@ -105,164 +103,181 @@ function getBBox(item) {
   }
 }
 
-// Расстояние между двумя bounding box-ами
-function distanceBetween(a, b) {
+// Расстояние между краями двух bounding box-ов
+function distanceBetweenEdges(a, b) {
   const dx = Math.max(0, Math.max(a.minX, b.minX) - Math.min(a.maxX, b.maxX))
   const dz = Math.max(0, Math.max(a.minZ, b.minZ) - Math.min(a.maxZ, b.maxZ))
   return Math.sqrt(dx * dx + dz * dz)
 }
 
-// Санитарные объекты
-const SANITARY_IDS = ['toilet', 'bath', 'shower', 'washing-machine']
-// Кухонные объекты
-const KITCHEN_IDS = ['fridge', 'stove', 'dining-table', 'kitchen-table']
-// Мягкая мебель
-const SOFT_IDS = ['sofa', 'armchair']
-// Шкафы
-const WARDROBE_IDS = ['wardrobe']
-// Кровати
-const BED_IDS = ['bed']
+// Пересекаются ли два bbox
+function overlaps(a, b) {
+  return (
+    a.minX < b.maxX && a.maxX > b.minX &&
+    a.minZ < b.maxZ && a.maxZ > b.minZ
+  )
+}
 
-export function checkNorms(items) {
+// Зоны санузла для каждой квартиры
+// Определяем по catalogId квартиры — передаём через аргумент
+const BATHROOM_ZONES = {
+  default: [
+    // Основная зона санузла — подбирается под конкретную квартиру
+    { minX: -2, maxX: 2, minZ: -2, maxZ: 2 },
+  ],
+  'apt-1room-2': [
+    // Санузел apt-1room-2: по координатам ванны/туалета которые ты расставлял
+    // Ванна X=-1.031, Z=-0.938 / Туалет X=0.818, Z=-0.368
+    // Зона санузла примерно:
+    { minX: -2.5, maxX: 2.0, minZ: -2.5, maxZ: 1.0 },
+  ],
+}
+
+export function checkNorms(items, apartmentId = 'apt-1room-2') {
   const violations = []
 
-  // Комната: x от -4 до 4, z от -3 до 3
-  const ROOM = { minX: -4, maxX: 4, minZ: -3, maxZ: 3 }
-
-  // Позиции радиаторов (у внешних стен, обычно под окнами)
-  // Задняя стена z = -3, окна обычно по центру
+  // Позиции радиаторов в квартире — у внешних стен под окнами
+  // Для apt-1room-2 окна Window1/Window2 на стороне X=6.70
   const RADIATORS = [
-    { x: 0, z: -2.85, w: 1.0, d: 0.1 }, // радиатор под окном задней стены
+    { minX: 5.5, maxX: 7.0, minZ: -2.0, maxZ: 2.0 },
   ]
 
-  // Позиция двери (левая стена)
-  const DOOR = { x: -3.95, z: 0, openRadius: 0.85, openDirection: 'right' }
+  // Зона открывания двери — примерная для apt-1room-2
+  const DOORS = [
+    { x: 0, z: -1.5, radius: 0.9 },
+  ]
+
+  // Зоны санузла
+  const bathroomZones = BATHROOM_ZONES[apartmentId] || BATHROOM_ZONES.default
+
+  // Проверяем находится ли точка в одной из зон санузла
+  function isInBathroom(bbox) {
+    return bathroomZones.some(zone =>
+      bbox.centerX >= zone.minX && bbox.centerX <= zone.maxX &&
+      bbox.centerZ >= zone.minZ && bbox.centerZ <= zone.maxZ
+    )
+  }
 
   for (let i = 0; i < items.length; i++) {
     const a = items[i]
     const bboxA = getBBox(a)
 
-    // ─── Е-3: Зона открывания двери ───
-    const distToDoor = Math.sqrt(
-      Math.pow(bboxA.centerX - DOOR.x, 2) +
-      Math.pow(bboxA.centerZ - DOOR.z, 2)
-    )
-    if (distToDoor < DOOR.openRadius + Math.max(bboxA.w, bboxA.d) / 2) {
-      violations.push({
-        ...RULES.DOOR_ZONE,
-        message: `"${a.title}" находится в зоне открывания двери. Освободите пространство радиусом 85 см от двери.`,
-        objectIds: [a.id],
-      })
-    }
-
-    // ─── З-2: Мебель перекрывает радиатор ───
-    for (const rad of RADIATORS) {
-      const radBbox = {
-        minX: rad.x - rad.w / 2, maxX: rad.x + rad.w / 2,
-        minZ: rad.z - rad.d / 2, maxZ: rad.z + rad.d / 2,
-      }
-      const dist = distanceBetween(bboxA, radBbox)
-      if (dist < 0.1) {
-        violations.push({
-          ...RULES.RADIATOR_BLOCK,
-          message: `"${a.title}" перекрывает радиатор отопления. Оставьте не менее 10 см — иначе теплоотдача снижается на 20–30%.`,
-          objectIds: [a.id],
-        })
-      }
-    }
-
-    // ─── З-3: Мебель перекрывает окно ───
-    // Окно на задней стене z = -3, x от -1.5 до 1.5, высота > 0.9м
-    const WINDOW = { minX: -1.5, maxX: 1.5, z: -3 }
-    if (
-      a.size[1] > 0.9 &&
-      bboxA.minZ < WINDOW.z + 0.3 &&
-      bboxA.maxX > WINDOW.minX &&
-      bboxA.minX < WINDOW.maxX
-    ) {
-      violations.push({
-        ...RULES.WINDOW_BLOCK,
-        message: `"${a.title}" перекрывает оконный проём. Это ухудшает естественное освещение и вентиляцию.`,
-        objectIds: [a.id],
-      })
-    }
-
-    // ─── Н-1: Сантехника вне санузла ───
+    // ─── Н-1: Сантехника вне санузла ────────────────────────────
     if (SANITARY_IDS.includes(a.catalogId)) {
-      // Зона санузла: правый угол комнаты
-      const BATHROOM_ZONE = { minX: 1.5, maxX: 4, minZ: -3, maxZ: 0 }
-      if (
-        bboxA.centerX < BATHROOM_ZONE.minX ||
-        bboxA.centerZ > BATHROOM_ZONE.maxZ
-      ) {
+      if (!isInBathroom(bboxA)) {
         violations.push({
           ...RULES.SANITARY_ZONE,
-          message: `"${a.title}" размещена вне зоны санузла. Сантехника не может располагаться над жилыми комнатами и кухней согласно СП 54.13330.2022, п. 7.20.`,
+          message: `"${a.title}" размещена вне зоны санузла. Согласно СП 54.13330.2022 п. 7.20, сантехника не может располагаться над жилыми комнатами.`,
           objectIds: [a.id],
         })
       }
     }
 
-    // ─── Е-4: Доступ к кровати ───
+    // ─── Р-1: Мебель перекрывает радиатор ────────────────────────
+    for (const rad of RADIATORS) {
+      const radBbox = { minX: rad.minX, maxX: rad.maxX, minZ: rad.minZ, maxZ: rad.maxZ }
+      if (overlaps(bboxA, radBbox) || distanceBetweenEdges(bboxA, radBbox) < 0.1) {
+        violations.push({
+          ...RULES.RADIATOR_BLOCK,
+          message: `"${a.title}" перекрывает радиатор отопления. Оставьте не менее 10 см — теплоотдача снизится на 20–30%.`,
+          objectIds: [a.id],
+        })
+      }
+    }
+
+    // ─── Р-2: Зона открывания двери ──────────────────────────────
+    for (const door of DOORS) {
+      const distToDoor = Math.sqrt(
+        Math.pow(bboxA.centerX - door.x, 2) +
+        Math.pow(bboxA.centerZ - door.z, 2)
+      )
+      const halfDiag = Math.sqrt(bboxA.w * bboxA.w + bboxA.d * bboxA.d) / 2
+      if (distToDoor - halfDiag < door.radius) {
+        violations.push({
+          ...RULES.DOOR_ZONE,
+          message: `"${a.title}" находится в зоне открывания двери. Освободите пространство радиусом 90 см.`,
+          objectIds: [a.id],
+        })
+      }
+    }
+
+    // ─── Р-3: Доступ к кровати ────────────────────────────────────
     if (BED_IDS.includes(a.catalogId)) {
-      const [w, , d] = a.size
-      const leftClear = bboxA.minX - ROOM.minX
-      const rightClear = ROOM.maxX - bboxA.maxX
-      const hasAccess = leftClear >= 0.6 || rightClear >= 0.6
+      // Хотя бы 60 см с одной стороны (слева или справа по X)
+      const leftSpace  = bboxA.minX - (-7)   // от левой стены
+      const rightSpace = 7 - bboxA.maxX       // до правой стены
+      const frontSpace = bboxA.minZ - (-2)    // спереди
+      const hasAccess  = leftSpace >= 0.6 || rightSpace >= 0.6 || frontSpace >= 0.6
       if (!hasAccess) {
         violations.push({
           ...RULES.BED_ACCESS,
-          message: `"${a.title}" стоит вплотную к стенам с обеих сторон. Оставьте хотя бы 60 см с одной стороны для удобного доступа.`,
+          message: `"${a.title}" стоит вплотную к стенам. Оставьте хотя бы 60 см с одной стороны для удобного доступа.`,
           objectIds: [a.id],
         })
       }
     }
 
-    // ─── Е-5: Зона перед шкафом ───
+    // ─── Р-4: Зона перед шкафом ──────────────────────────────────
     if (WARDROBE_IDS.includes(a.catalogId)) {
-      const frontClear = ROOM.maxX - bboxA.maxX
-      if (frontClear < 0.6) {
+      // Ищем ближайший свободный проход перед шкафом
+      const frontSpace = bboxA.minZ - (-2)
+      const backSpace  = 2 - bboxA.maxZ
+      const clearance  = Math.max(frontSpace, backSpace)
+      if (clearance < 0.6) {
         violations.push({
           ...RULES.WARDROBE_ZONE,
-          message: `"${a.title}": перед шкафом менее 60 см. Двери не откроются свободно.`,
+          message: `Перед "${a.title}" менее 60 см. Дверцы не откроются свободно.`,
           objectIds: [a.id],
         })
       }
     }
 
-    // Проверки между парами объектов
+    // ─── Проверки между парами объектов ──────────────────────────
     for (let j = i + 1; j < items.length; j++) {
       const b = items[j]
       const bboxB = getBBox(b)
-      const dist = distanceBetween(bboxA, bboxB)
 
-      // ─── Е-1: Минимальный проход 60 см ───
-      if (dist < 0.6 && dist > 0) {
+      // Пропускаем шторы и настенные полки в проверке проходов
+      if (
+        EXCLUDE_FROM_PASSAGE.includes(a.catalogId) ||
+        EXCLUDE_FROM_PASSAGE.includes(b.catalogId)
+      ) continue
+
+      const dist = distanceBetweenEdges(bboxA, bboxB)
+
+      // ─── Е-1: Минимальный проход 60 см ───────────────────────
+      // Проверяем только если объекты реально рядом (не в разных концах комнаты)
+      // Центры не дальше 3м друг от друга
+      const centerDist = Math.sqrt(
+        Math.pow(bboxA.centerX - bboxB.centerX, 2) +
+        Math.pow(bboxA.centerZ - bboxB.centerZ, 2)
+      )
+      if (dist < 0.6 && dist > 0.01 && centerDist < 4.0) {
         violations.push({
           ...RULES.MIN_PASSAGE,
-          message: `Расстояние между "${a.title}" и "${b.title}" — ${Math.round(dist * 100)} см. Минимальный проход — 60 см.`,
+          message: `Расстояние между "${a.title}" и "${b.title}" — ${Math.round(dist * 100)} см. Рекомендуемый проход — минимум 60 см.`,
           objectIds: [a.id, b.id],
         })
       }
 
-      // ─── З-1: Холодильник рядом с плитой ───
+      // ─── З-1: Холодильник рядом с плитой ─────────────────────
       const isFridgeStove =
         (a.catalogId === 'fridge' && b.catalogId === 'stove') ||
         (a.catalogId === 'stove' && b.catalogId === 'fridge')
       if (isFridgeStove && dist < 0.15) {
         violations.push({
           ...RULES.FRIDGE_STOVE,
-          message: `Холодильник стоит вплотную к плите. Оставьте не менее 15 см — тепловое воздействие сокращает срок службы холодильника.`,
+          message: `Холодильник стоит вплотную к плите. Оставьте 15 см — тепловое воздействие сокращает срок службы холодильника.`,
           objectIds: [a.id, b.id],
         })
       }
     }
   }
 
-  // Убираем дубли по objectIds
+  // Убираем дубли
   const seen = new Set()
   return violations.filter(v => {
-    const key = v.id + v.objectIds.sort().join(',')
+    const key = v.id + (v.objectIds || []).slice().sort().join(',')
     if (seen.has(key)) return false
     seen.add(key)
     return true

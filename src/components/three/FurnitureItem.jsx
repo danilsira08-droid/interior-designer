@@ -1,188 +1,181 @@
-import { useRef, Suspense, useState } from 'react'
+import { useRef, useState, useEffect, Suspense } from 'react'
 import { useThree } from '@react-three/fiber'
-import { Box, useGLTF, Html } from '@react-three/drei'
+import { useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { useEditorStore } from '../../modules/editor/useEditorStore'
+import { useEditorStore, SANITARY_IDS } from '../../modules/editor/useEditorStore'
+import { clampToApartment, isInBathroom } from '../../modules/editor/apartmentBounds'
 
-const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-const planeTarget = new THREE.Vector3()
+// Вычисляет реальный bbox загруженной сцены
+function SelectionOutline({ scene }) {
+  const box    = new THREE.Box3().setFromObject(scene)
+  const size   = new THREE.Vector3()
+  const center = new THREE.Vector3()
+  box.getSize(size)
+  box.getCenter(center)
 
-function GLBModel({ modelPath }) {
-  const { scene } = useGLTF(modelPath)
-  const cloned = scene.clone(true)
-  cloned.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow = true
-      child.receiveShadow = true
-    }
-  })
-  return <primitive object={cloned} />
-}
-
-function BoxModel({ size, color, isSelected }) {
-  const [w, h, d] = size
+  // center — локальные координаты внутри группы (уже с учётом поворота группы)
   return (
-    <Box args={[w, h, d]} position={[0, h / 2, 0]} castShadow receiveShadow>
-      <meshStandardMaterial
-        color={isSelected ? '#7c3aed' : color}
-        roughness={0.7}
-        emissive={isSelected ? '#4c1d95' : '#000000'}
-        emissiveIntensity={isSelected ? 0.4 : 0}
-      />
-    </Box>
+    <mesh position={[center.x, center.y, center.z]}>
+      <boxGeometry args={[size.x + 0.05, size.y + 0.05, size.z + 0.05]} />
+      <meshBasicMaterial color="#7c3aed" wireframe opacity={0.6} transparent depthTest={false} />
+    </mesh>
   )
 }
 
-// Глобальное состояние диалога — используем ref чтобы не перерисовывать всё
-let confirmCallback = null
+function FurnitureModel({ modelPath, color, selected }) {
+  const { scene } = useGLTF(modelPath)
+  const cloned = useRef(null)
 
-function FurnitureItem({ item, interactive = true }) {
-  const { gl, camera, raycaster } = useThree()
-  const { selectedId, selectItem, moveItem, deselect } = useEditorStore()
-  const isSelected = selectedId === item.id && interactive
-  const dragging = useRef(false)
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [w, h, d] = item.size
-
-  const handleConfirmYes = (e) => {
-    e.stopPropagation()
-    setShowConfirm(false)
-    selectItem(item.id)
-  }
-
-  const handleConfirmNo = (e) => {
-    e.stopPropagation()
-    setShowConfirm(false)
-    deselect()
-  }
-
-  const onPointerDown = (e) => {
-    if (!interactive) return
-    e.stopPropagation()
-
-    // Если уже выбран — сразу тащим
-    if (selectedId === item.id) {
-      dragging.current = true
-      gl.domElement.setPointerCapture(e.pointerId)
-      gl.domElement.style.cursor = 'grabbing'
-      return
-    }
-
-    // Показываем диалог подтверждения
-    setShowConfirm(true)
-  }
-
-  const onPointerUp = (e) => {
-    if (!interactive) return
-    dragging.current = false
-    gl.domElement.releasePointerCapture(e.pointerId)
-    gl.domElement.style.cursor = 'auto'
-  }
-
-  const onPointerMove = (e) => {
-    if (!dragging.current || !interactive || showConfirm) return
-    e.stopPropagation()
-
-    const rect = gl.domElement.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-
-    raycaster.setFromCamera({ x, y }, camera)
-    raycaster.ray.intersectPlane(floorPlane, planeTarget)
-
-    if (planeTarget) {
-      const newX = Math.max(0.3 + w / 2, Math.min(10.0 - w / 2, planeTarget.x))
-      const newZ = Math.max(-3.0 + d / 2, Math.min(5.4 - d / 2, planeTarget.z))
-      moveItem(item.id, [newX, 0, newZ])
-    }
+  // Клонируем один раз
+  if (!cloned.current) {
+    cloned.current = scene.clone(true)
   }
 
   return (
+    <>
+      <primitive object={cloned.current} />
+      {selected && <SelectionOutline scene={cloned.current} />}
+    </>
+  )
+}
+
+function FurnitureModelSafe({ modelPath, color, selected, size }) {
+  try {
+    return <FurnitureModel modelPath={modelPath} color={color} selected={selected} />
+  } catch (e) {
+    return <FallbackBox size={size} color={color} selected={selected} />
+  }
+}
+
+function FallbackBox({ size, color, selected }) {
+  return (
+    <>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={size} />
+        <meshStandardMaterial color={color || '#888'} roughness={0.7} metalness={0.1} />
+      </mesh>
+      {selected && (
+        <mesh>
+          <boxGeometry args={[size[0] + 0.05, size[1] + 0.05, size[2] + 0.05]} />
+          <meshBasicMaterial color="#7c3aed" wireframe opacity={0.6} transparent depthTest={false} />
+        </mesh>
+      )}
+    </>
+  )
+}
+
+export default function FurnitureItem({ item, interactive }) {
+  const groupRef = useRef()
+  const { camera, gl, raycaster, invalidate } = useThree()
+  const { selectedId, selectItem, moveItem, currentApartmentId } = useEditorStore()
+  const selected = selectedId === item.id
+
+  const [bathroomWarning, setBathroomWarning] = useState(false)
+  const isDragging = useRef(false)
+  const dragPlane  = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+  const dragOffset = useRef(new THREE.Vector3())
+
+  const isSanitary = SANITARY_IDS.has(item.catalogId)
+
+  useEffect(() => {
+    if (!isSanitary || !currentApartmentId) return
+    const [x, , z] = item.position
+    setBathroomWarning(!isInBathroom(x, z, currentApartmentId))
+  }, [item.position, isSanitary, currentApartmentId])
+
+  const getFloorPos = (event) => {
+    const rect  = gl.domElement.getBoundingClientRect()
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width)  * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    raycaster.setFromCamera(mouse, camera)
+    const target = new THREE.Vector3()
+    raycaster.ray.intersectPlane(dragPlane.current, target)
+    return target
+  }
+
+  const handlePointerDown = (e) => {
+    if (!interactive) return
+    e.stopPropagation()
+    selectItem(item.id)
+    isDragging.current = true
+    gl.domElement.style.cursor = 'grabbing'
+
+    const floorPos = getFloorPos(e.nativeEvent)
+    if (floorPos) {
+      dragOffset.current.set(
+        item.position[0] - floorPos.x,
+        0,
+        item.position[2] - floorPos.z,
+      )
+    }
+
+    const onMove = (ev) => {
+      if (!isDragging.current) return
+      const pos = getFloorPos(ev)
+      if (!pos) return
+
+      let newX = pos.x + dragOffset.current.x
+      let newZ = pos.z + dragOffset.current.z
+
+      if (currentApartmentId) {
+        ;[newX, newZ] = clampToApartment(
+          newX, newZ,
+          item.size[0], item.size[2],
+          item.rotation,
+          currentApartmentId,
+        )
+      }
+
+      moveItem(item.id, [newX, 0, newZ])
+      invalidate()
+    }
+
+    const onUp = () => {
+      isDragging.current = false
+      gl.domElement.style.cursor = 'grab'
+      useEditorStore.getState().saveCurrentItems?.()
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup',   onUp)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup',   onUp)
+  }
+
+  const [x, y, z] = item.position
+
+  return (
     <group
-      position={item.position}
-      rotation={[0, item.rotation, 0]}
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-      onPointerMove={onPointerMove}
+      ref={groupRef}
+      position={[x, y, z]}
+      rotation={[0, item.rotation || 0, 0]}
+      onPointerDown={handlePointerDown}
+      onPointerOver={() => { if (interactive) gl.domElement.style.cursor = 'grab' }}
+      onPointerOut={() => { if (interactive) gl.domElement.style.cursor = 'auto' }}
     >
-      {item.modelPath ? (
-        <Suspense fallback={<BoxModel size={item.size} color={item.color} isSelected={isSelected} />}>
-          <GLBModel modelPath={item.modelPath} />
-        </Suspense>
-      ) : (
-        <BoxModel size={item.size} color={item.color} isSelected={isSelected} />
-      )}
+      <Suspense fallback={<FallbackBox size={item.size} color={item.color} selected={selected} />}>
+        {item.modelPath
+          ? <FurnitureModelSafe modelPath={item.modelPath} color={item.color} selected={selected} size={item.size} />
+          : <FallbackBox size={item.size} color={item.color} selected={selected} />
+        }
+      </Suspense>
 
-      {isSelected && (
-        <Box args={[w + 0.06, h + 0.06, d + 0.06]} position={[0, h / 2, 0]}>
-          <meshBasicMaterial color="#7c3aed" wireframe />
-        </Box>
-      )}
-
-      {/* Диалог подтверждения — рендерится в 3D пространстве над объектом */}
-      {showConfirm && (
-        <Html
-          position={[0, h + 0.5, 0]}
-          center
-          distanceFactor={6}
-          zIndexRange={[100, 0]}
-        >
-          <div
-            style={{
-              background: 'rgba(24, 24, 27, 0.97)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '14px',
-              padding: '14px 18px',
-              minWidth: '180px',
-              textAlign: 'center',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-              userSelect: 'none',
-            }}
-          >
-            <p style={{ color: '#a1a1aa', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              переместить?
-            </p>
-            <p style={{ color: '#ffffff', fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>
-              {item.title}
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onPointerDown={handleConfirmYes}
-                style={{
-                  flex: 1,
-                  padding: '7px 0',
-                  borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                да
-              </button>
-              <button
-                onPointerDown={handleConfirmNo}
-                style={{
-                  flex: 1,
-                  padding: '7px 0',
-                  borderRadius: '8px',
-                  background: 'rgba(255,255,255,0.06)',
-                  color: '#a1a1aa',
-                  fontSize: '13px',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  cursor: 'pointer',
-                }}
-              >
-                нет
-              </button>
-            </div>
+      {/* Предупреждение — сантехника не в санузле */}
+      {bathroomWarning && (
+        <Html center distanceFactor={8} position={[0, item.size[1] + 0.3, 0]}>
+          <div style={{
+            background: 'rgba(220,38,38,0.95)', color: 'white',
+            padding: '4px 10px', borderRadius: '8px',
+            fontSize: '12px', fontWeight: 600,
+            whiteSpace: 'nowrap', pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}>
+            ⚠️ Только в санузле
           </div>
         </Html>
       )}
     </group>
   )
 }
-
-export default FurnitureItem
