@@ -1,161 +1,178 @@
 import { useParams, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
 import { apartments } from '../data/apartments'
 import { useSiteTheme } from '../context/ThemeContext'
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: (i = 0) => ({
-    opacity: 1, y: 0,
-    transition: { duration: 0.5, delay: i * 0.1, ease: [0.25, 0.1, 0.25, 1] }
-  })
+  hidden:   { opacity: 0, y: 24 },
+  visible:  (i = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.5, delay: i * 0.08 } })
 }
 
+const PHOTO_TABS = [
+  { id: 'plan',        label: '2D план',     key: 'plan' },
+  { id: 'preview',     label: '3D вид',      key: 'preview' },
+  { id: 'firstperson', label: 'От первого лица', key: 'firstperson' },
+]
+
 function Apartment() {
-  const { id } = useParams()
-  const apt = apartments.find(a => a.id === id)
+  const { id }  = useParams()
+  const apt     = apartments.find(a => a.id === id)
   const { isDark } = useSiteTheme()
-  const [activeImage, setActiveImage] = useState(0) // 0 = превью, 1 = план, 2+ = галерея
+  const [activeTab, setActiveTab] = useState('plan')
 
-  const accent      = isDark ? '#7c3aed' : '#f97316'
-  const accentText  = isDark ? 'text-violet-400' : 'text-orange-500'
-  const bg          = isDark ? 'bg-zinc-950 text-white'  : 'bg-white text-zinc-900'
-  const sub         = isDark ? 'text-zinc-400' : 'text-zinc-500'
-  const cardBg      = isDark ? 'bg-white/[0.03] border-white/5' : 'bg-zinc-50 border-zinc-100'
-  const tagBorder   = isDark ? 'text-zinc-300 border-white/10' : 'text-zinc-600 border-zinc-200'
-  const breadcrumb  = isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'
-  const thumbBg     = isDark ? 'bg-white/5 border-white/8'  : 'bg-zinc-100 border-zinc-200'
-  const thumbActive = isDark ? 'border-violet-500' : 'border-orange-400'
-  const btnPrimary  = isDark ? 'bg-violet-600 hover:bg-violet-500' : 'bg-orange-500 hover:bg-orange-400'
+  const bg         = isDark ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-900'
+  const sub        = isDark ? 'text-zinc-400' : 'text-zinc-500'
+  const cardBg     = isDark ? 'bg-white/[0.03] border-white/5' : 'bg-zinc-50 border-zinc-100'
+  const tagBorder  = isDark ? 'text-zinc-300 border-white/10' : 'text-zinc-600 border-zinc-200'
+  const breadcrumb = isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'
+  const btnPrimary = isDark ? 'bg-violet-600 hover:bg-violet-500' : 'bg-orange-500 hover:bg-orange-400'
+  const tabActive  = isDark ? 'bg-white/10 text-white' : 'bg-zinc-200 text-zinc-900'
+  const tabInactive= isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-700'
+  const accent     = isDark ? '#7c3aed' : '#f97316'
+  const accentText = isDark ? 'text-violet-400' : 'text-orange-500'
 
-  // Все изображения для галереи
-  const allImages = [
-    apt?.preview  ? { src: apt.preview,  label: 'Рендер' }    : null,
-    apt?.plan2d   ? { src: apt.plan2d,   label: '2D план' }   : null,
-    ...(apt?.gallery || []).map((src, i) => ({ src, label: `Фото ${i + 1}` })),
-  ].filter(Boolean)
+  if (!apt) return (
+    <main className={`min-h-screen flex items-center justify-center ${bg}`}>
+      <div className="text-center">
+        <p className={`mb-4 ${sub}`}>Квартира не найдена</p>
+        <Link to="/catalog" style={{ color: accent }}>Вернуться в каталог</Link>
+      </div>
+    </main>
+  )
 
-  const hasImages = allImages.length > 0
-
-  if (!apt) {
-    return (
-      <main className={`min-h-screen flex items-center justify-center ${bg}`}>
-        <div className="text-center">
-          <p className={`mb-4 ${sub}`}>Квартира не найдена</p>
-          <Link to="/catalog" style={{ color: accent }}>Вернуться в каталог</Link>
-        </div>
-      </main>
-    )
-  }
-
-  const roomLabel = apt.rooms === 0 ? 'Студия' : `${apt.rooms}-комнатная квартира`
+  const activePhoto = apt[activeTab]
+  const roomLabel   = apt.rooms === 0 ? 'Студия' : `${apt.rooms}-комн.`
 
   return (
-    <main className={`min-h-screen pt-20 pb-20 transition-colors duration-300 ${bg}`}>
+    <main className={`min-h-screen pt-20 pb-20 ${bg}`}>
       <style>{`
-        @keyframes gradientShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        .grad-dark { background: linear-gradient(135deg,#a78bfa,#f472b6,#a78bfa); background-size:200% 200%; animation:gradientShift 4s ease infinite; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .grad-light { background: linear-gradient(135deg,#f97316,#fbbf24,#f97316); background-size:200% 200%; animation:gradientShift 4s ease infinite; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        .grad-dark  { background:linear-gradient(135deg,#a78bfa,#f472b6,#a78bfa); background-size:200% 200%; animation:gradientShift 4s ease infinite; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .grad-light { background:linear-gradient(135deg,#f97316,#fbbf24,#f97316); background-size:200% 200%; animation:gradientShift 4s ease infinite; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
       `}</style>
 
       <div className="max-w-6xl mx-auto px-6">
 
         {/* Хлебные крошки */}
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}
+        <motion.div variants={fadeUp} initial="hidden" animate="visible"
           className={`flex items-center gap-2 text-sm mb-8 ${sub}`}
         >
-          <Link to="/" className={`transition-colors ${breadcrumb}`}>Главная</Link>
+          <Link to="/"       className={`transition-colors ${breadcrumb}`}>Главная</Link>
           <span>/</span>
           <Link to="/catalog" className={`transition-colors ${breadcrumb}`}>Каталог</Link>
           <span>/</span>
-          <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>{apt.title}</span>
+          <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>{apt.title} · {apt.subtitle}</span>
         </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-16">
+        <div className="grid lg:grid-cols-2 gap-14">
 
-          {/* Левая — изображения */}
+          {/* ── ЛЕВАЯ — фото ─────────────────────────────────────── */}
           <div>
-            {/* Главное изображение */}
-            <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={1}
-              className={`rounded-2xl overflow-hidden mb-4 border ${cardBg}`}
-              style={{ height: '360px' }}
+            {/* Табы */}
+            <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}
+              className="flex gap-1 mb-3"
             >
-              {hasImages && activeImage < allImages.length ? (
-                <img
-                  src={allImages[activeImage].src}
-                  alt={allImages[activeImage].label}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                /* Заглушка — красивый план-схема */
-                <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden"
-                  style={{ background: isDark ? `${accent}10` : `${accent}08` }}
+              {PHOTO_TABS.map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === tab.id ? tabActive : tabInactive}`}
                 >
-                  <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 500 360" fill="none">
-                    {/* Контур квартиры */}
-                    <rect x="30" y="30" width="440" height="300" stroke={accent} strokeWidth="2.5" rx="2"/>
-                    {/* Комнаты */}
-                    <line x1="200" y1="30" x2="200" y2="200" stroke={accent} strokeWidth="1.5"/>
-                    <line x1="30" y1="200" x2="350" y2="200" stroke={accent} strokeWidth="1.5"/>
-                    <line x1="350" y1="30" x2="350" y2="330" stroke={accent} strokeWidth="1.5"/>
-                    {/* Мебель схема */}
-                    <rect x="50" y="50" width="60" height="40" rx="3" stroke={accent} strokeWidth="1" opacity="0.6"/>
-                    <rect x="220" y="50" width="80" height="50" rx="3" stroke={accent} strokeWidth="1" opacity="0.6"/>
-                    <rect x="55" y="220" width="100" height="80" rx="3" stroke={accent} strokeWidth="1" opacity="0.6"/>
-                    {/* Окна */}
-                    <rect x="360" y="80" width="5" height="60" fill={accent} opacity="0.4"/>
-                    <rect x="360" y="180" width="5" height="60" fill={accent} opacity="0.4"/>
-                  </svg>
-                  <div className="relative text-center">
-                    <div className="text-6xl font-bold mb-2 opacity-10" style={{ color: accent }}>
-                      {apt.rooms === 0 ? 'С' : apt.rooms}К
-                    </div>
-                    <p className={`text-sm ${sub}`}>Рендер появится после добавления</p>
-                  </div>
-                </div>
-              )}
+                  {tab.label}
+                </button>
+              ))}
             </motion.div>
 
-            {/* Миниатюры */}
-            <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={2}
-              className="flex gap-2 flex-wrap"
+            {/* Главное фото */}
+            <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={1}
+              className={`rounded-2xl overflow-hidden border mb-3 ${cardBg}`}
+              style={{ height: 360 }}
             >
-              {hasImages ? allImages.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImage(i)}
-                  className={`rounded-xl overflow-hidden border-2 transition-all ${
-                    activeImage === i ? thumbActive : thumbBg
-                  }`}
-                  style={{ width: 72, height: 52 }}
+              <AnimatePresence mode="wait">
+                <motion.div key={activeTab}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full h-full"
                 >
-                  <img src={img.src} alt={img.label} className="w-full h-full object-cover" />
-                </button>
-              )) : (
-                /* Заглушки под будущие фото */
-                ['Рендер', '2D план', 'Фото'].map((label, i) => (
-                  <div key={i}
-                    className={`rounded-xl border-2 flex items-center justify-center text-xs transition-all ${thumbBg} ${sub}`}
-                    style={{ width: 72, height: 52 }}
+                  {activePhoto ? (
+                    <img src={activePhoto} alt={PHOTO_TABS.find(t => t.id === activeTab)?.label}
+                      className="w-full h-full object-cover"
+                      onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
+                    />
+                  ) : null}
+                  {/* Заглушка */}
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3"
+                    style={{ display: activePhoto ? 'none' : 'flex' }}
                   >
-                    {label}
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" opacity="0.3">
+                      {activeTab === 'plan' && (
+                        <>
+                          <rect x="8" y="8" width="32" height="32" rx="2" stroke="currentColor" strokeWidth="2"/>
+                          <path d="M8 24h32M24 8v32" stroke="currentColor" strokeWidth="1.5"/>
+                        </>
+                      )}
+                      {activeTab === 'preview' && (
+                        <>
+                          <rect x="8" y="16" width="32" height="24" rx="2" stroke="currentColor" strokeWidth="2"/>
+                          <path d="M16 16l8-8 16 8" stroke="currentColor" strokeWidth="1.5"/>
+                        </>
+                      )}
+                      {activeTab === 'firstperson' && (
+                        <>
+                          <circle cx="24" cy="24" r="10" stroke="currentColor" strokeWidth="2"/>
+                          <circle cx="24" cy="24" r="3" fill="currentColor"/>
+                        </>
+                      )}
+                    </svg>
+                    <p className={`text-sm ${sub}`}>
+                      {activeTab === 'plan' && 'Фото 2D плана появится скоро'}
+                      {activeTab === 'preview' && 'Фото 3D вида появится скоро'}
+                      {activeTab === 'firstperson' && 'Фото от первого лица появится скоро'}
+                    </p>
                   </div>
-                ))
-              )}
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+
+            {/* Миниатюры всех трёх */}
+            <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={2}
+              className="grid grid-cols-3 gap-2"
+            >
+              {PHOTO_TABS.map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-xl overflow-hidden border-2 transition-all relative ${
+                    activeTab === tab.id
+                      ? isDark ? 'border-violet-500' : 'border-orange-400'
+                      : isDark ? 'border-white/8'    : 'border-zinc-200'
+                  }`}
+                  style={{ height: 72 }}
+                >
+                  {apt[tab.key] ? (
+                    <img src={apt[tab.key]} alt={tab.label} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center text-xs ${sub} ${isDark ? 'bg-white/5' : 'bg-zinc-100'}`}>
+                      {tab.label}
+                    </div>
+                  )}
+                  {/* Подпись */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-xs py-0.5 text-center">
+                    {tab.label}
+                  </div>
+                </button>
+              ))}
             </motion.div>
           </div>
 
-          {/* Правая — информация */}
+          {/* ── ПРАВАЯ — информация ───────────────────────────────── */}
           <div>
             <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={2}>
-              <span className={`text-sm font-medium tracking-widest uppercase mb-2 block ${accentText}`}>
-                {roomLabel}
-              </span>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-sm font-medium uppercase tracking-widest ${accentText}`}>
+                  {roomLabel}
+                </span>
+                <span className={`text-sm ${sub}`}>· {apt.subtitle}</span>
+              </div>
               <h1 className="text-4xl font-bold mb-1">
                 <span className={isDark ? 'grad-dark' : 'grad-light'}>{apt.title}</span>
               </h1>
@@ -167,10 +184,10 @@ function Apartment() {
               className="grid grid-cols-2 gap-3 mb-6"
             >
               {[
-                { label: 'Площадь',         value: `${apt.area} м²` },
-                { label: 'Комнаты',          value: apt.rooms === 0 ? 'Студия' : `${apt.rooms} комн.` },
-                { label: 'Этаж',             value: apt.floor },
-                { label: 'Высота потолков',  value: `${apt.ceilingHeight} м` },
+                { label: 'Площадь',        value: `${apt.area} м²` },
+                { label: 'Комнат',         value: apt.rooms === 0 ? 'Студия' : apt.rooms },
+                { label: 'Этаж',           value: apt.floor },
+                { label: 'Высота потолков',value: `${apt.ceilingHeight} м` },
               ].map(item => (
                 <div key={item.label} className={`p-4 rounded-xl border ${cardBg}`}>
                   <div className={`text-xs mb-1 ${sub}`}>{item.label}</div>
@@ -179,7 +196,7 @@ function Apartment() {
               ))}
             </motion.div>
 
-            {/* Зоны квартиры (если есть) */}
+            {/* Зонирование */}
             {apt.rooms_data && (
               <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={4} className="mb-6">
                 <p className={`text-xs uppercase tracking-widest mb-3 ${sub}`}>Зонирование</p>
@@ -189,15 +206,9 @@ function Apartment() {
                       <span className={`text-sm ${sub}`}>{zone.name}</span>
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 rounded-full"
-                          style={{
-                            width: `${Math.round(zone.area / apt.area * 120)}px`,
-                            backgroundColor: accent,
-                            opacity: 0.6,
-                          }}
+                          style={{ width: `${Math.round(zone.area / apt.area * 120)}px`, backgroundColor: accent, opacity: 0.6 }}
                         />
-                        <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-zinc-900'}`}>
-                          {zone.area} м²
-                        </span>
+                        <span className={`text-sm font-medium`}>{zone.area} м²</span>
                       </div>
                     </div>
                   ))}
@@ -217,9 +228,8 @@ function Apartment() {
 
             {/* Кнопка в редактор */}
             <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={6}>
-              <Link
-                to={`/editor/${apt.id}`}
-                className={`w-full flex items-center justify-center gap-3 px-8 py-4 rounded-2xl text-white font-semibold text-lg transition-all duration-200 hover:scale-[1.02] ${btnPrimary}`}
+              <Link to={`/editor/${apt.id}`}
+                className={`w-full flex items-center justify-center gap-3 px-8 py-4 rounded-2xl text-white font-semibold text-lg transition-all hover:scale-[1.02] ${btnPrimary}`}
                 style={{ boxShadow: `0 8px 30px ${accent}35` }}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -230,9 +240,6 @@ function Apartment() {
                 </svg>
                 Открыть в редакторе
               </Link>
-              <p className={`text-center text-sm mt-3 ${sub}`}>
-                Расставь мебель и посмотри интерьер в 3D
-              </p>
             </motion.div>
           </div>
         </div>

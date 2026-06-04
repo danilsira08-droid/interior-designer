@@ -4,12 +4,18 @@ import * as THREE from 'three'
 
 // ── OFFSETS ──────────────────────────────────────────────────────
 const APARTMENT_OFFSETS = {
-  'apt-1room':    -13.6,
-  'apt-1room-2':   0,
-  'apt-2room':     0,
-  'apt-studroom':  0,
-  'apt-3room':     0,
-  'apt-3room2':    0,   // подберёшь после первого запуска
+  'apt-1room':      -13.6,
+  'apt-1room-2':     0,
+  'apt-1room-3':     0,   // подберёшь после первого запуска
+  'apt-studroom':    0,
+  'apt-studroom-2':  0,   // подберёшь после первого запуска
+  'apt-studroom-3':  0,   // подберёшь после первого запуска
+  'apt-2room':       0,
+  'apt-2room-2':     0,   // подберёшь после первого запуска
+  'apt-2room-3':     0,   // подберёшь после первого запуска
+  'apt-3room':       0,
+  'apt-3room2':      0,
+  'apt-3room-3':     0,   // подберёшь после первого запуска
 }
 
 // ── ЛАМПЫ ────────────────────────────────────────────────────────
@@ -228,3 +234,6 @@ export default function RoomLoader(props) {
 useGLTF.preload('/models/apartments/apt-1room-2.glb')
 useGLTF.preload('/models/apartments/apt-3room.glb')
 useGLTF.preload('/models/apartments/apt-3room2.glb')
+useGLTF.preload('/models/apartments/apt-1room3.glb')
+useGLTF.preload('/models/apartments/apt-studroom2.glb')
+useGLTF.preload('/models/apartments/apt-2room-2.glb')
