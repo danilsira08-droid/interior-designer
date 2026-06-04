@@ -27,19 +27,18 @@ const APARTMENT_CONTEXTS = {
 НЕ ставь мебель в прихожую (X:-2.92..2.08, Z:-2.18..1.11).`,
   },
   'apt-3room2': {
-  name: '3-комнатная квартира (вар. 2), 106 м²',
-  description: 'Просторная квартира с открытой кухней-гостиной, двумя спальнями, двумя санузлами и двумя гардеробными.',
-  zonesText: `- Кухня-гостиная (23 м²): основное открытое пространство — диван, ТВ-зона, обеденный стол
+    name: '3-комнатная квартира (вар. 2), 106 м²',
+    description: 'Просторная квартира с открытой кухней-гостиной, двумя спальнями, двумя санузлами и двумя гардеробными.',
+    zonesText: `- Кухня-гостиная (23 м²): основное открытое пространство — диван, ТВ-зона, обеденный стол
 - Спальня 1 (16.6 м²): большая спальня — кровать, шкаф, рабочее место
 - Спальня 2 (15.3 м²): спальня — кровать, шкаф
 - Гардеробные (4+4.8 м²): компактные шкафы
 - Санузлы — только сантехника, мебель не ставить
 - Холл и прихожая — не заполнять мебелью`,
-  tips: `Квартира просторная 106 м², размещай мебель свободно.
-Кухня-гостиная — открытое пространство: диван в центре или у стены, ТВ-тумба напротив, обеденный стол с креслами у кухонной зоны.
-Спальни: кровать у дальней стены, шкаф вдоль боковой стены.
-После замера инструментом уточни координаты и сообщи разработчику.`,
-},
+    tips: `Квартира просторная 106 м², размещай мебель свободно.
+Кухня-гостиная: диван у стены, ТВ-тумба напротив, обеденный стол у кухонной зоны.
+Спальни: кровать у дальней стены, шкаф вдоль боковой стены.`,
+  },
   'apt-1room': {
     name: '1-комнатная квартира, 42 м²',
     description: 'Просторная однокомнатная квартира.',
@@ -68,18 +67,18 @@ const QUICK_PROMPTS = {
     'Кухню с гарнитуром и обеденным столом',
     'Полная расстановка всей квартиры',
   ],
+  'apt-3room2': [
+    'Гостиную с диваном, ковром и ТВ-зоной',
+    'Обе спальни — кровати и шкафы',
+    'Кухню с гарнитуром и обеденным столом',
+    'Полная расстановка всей квартиры',
+  ],
   default: [
     'Уютная гостиная с диваном и ковром',
     'Спальня для двоих',
     'Кухня с обеденной зоной',
     'Расставь всю мебель',
   ],
-  'apt-3room2': [
-  'Гостиную с диваном, ковром и ТВ-зоной',
-  'Обе спальни — кровати и шкафы',
-  'Кухню с гарнитуром и обеденным столом',
-  'Полная расстановка всей квартиры',
-],
 }
 
 async function callClaude(prompt, apartmentId) {
@@ -87,61 +86,66 @@ async function callClaude(prompt, apartmentId) {
 
   const furnitureList = FURNITURE_CATALOG
     .filter(f => !SANITARY_IDS.has(f.id))
-    .map(f => `id:"${f.id}" | "${f.title}" | ${f.size[0]}×${f.size[2]}м | ${f.category} | ${f.description}`)
+    .map(f => `id:"${f.id}" | "${f.title}" | ${f.size[0]}×${f.size[2]}м | ${f.category}`)
     .join('\n')
 
-  const system = `Ты опытный AI-дизайнер интерьера. Квартира: ${ctx.name}. ${ctx.description}
+  const system = `Ты дизайнер интерьера. Расставляй мебель в квартире.
 
-ЗОНЫ ДЛЯ РАЗМЕЩЕНИЯ:
-${ctx.zonesText}
+КВАРТИРА: ${ctx.name}
+ЗОНЫ: ${ctx.zonesText}
+ПОДСКАЗКИ: ${ctx.tips}
 
-ПОДСКАЗКИ:
-${ctx.tips}
-
-ДОСТУПНАЯ МЕБЕЛЬ (только из этого списка, ID строго как указан):
+МЕБЕЛЬ:
 ${furnitureList}
 
-ПРАВИЛА РАЗМЕЩЕНИЯ:
-1. Координаты СТРОГО внутри границ комнаты
-2. Кровать — изголовьем к стене (отступ 0.1м от края)
-3. Диван — у стены или лицом к ТВ-тумбе
-4. Шкаф — вплотную к стене (отступ 0.05м)
-5. Ковёр — под диваном и столиком (rotation:0)
-6. Гарнитур — вдоль стены кухни
-7. Между предметами минимум 0.6м прохода
-8. Санузлы и прихожую НЕ заполнять
+ПРАВИЛА: координаты строго внутри границ зон, кровать у стены, диван у стены, шкаф у стены, санузлы не заполнять, rotation только 0 или 1.5708 или 3.1416.
 
-Ответь ТОЛЬКО валидным JSON:
-{
-  "items": [{"catalogId":"id","x":0.0,"z":0.0,"rotation":0}],
-  "explanation": "2-3 предложения на русском"
-}`
+Ответь ТОЛЬКО валидным JSON без markdown:
+{"items":[{"catalogId":"id","x":0.0,"z":0.0,"rotation":0}],"explanation":"текст на русском"}`
 
-const response = await fetch('/api/claude', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 2000,
-    system,
-    messages: [{ role: 'user', content: prompt }],
-  }),
-})
+  const isLocal = import.meta.env.DEV
+  const url = isLocal ? 'https://api.anthropic.com/v1/messages' : '/api/claude'
+  const headers = isLocal
+    ? {
+        'Content-Type': 'application/json',
+        'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      }
+    : { 'Content-Type': 'application/json' }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 3000,
+      system,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
 
   const data = await response.json()
   const text = data.content?.[0]?.text || ''
+
   try {
     const clean = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
-    // Дополнительная защита — убираем сантехнику если AI всё-таки добавил
+
     if (parsed.items) {
+      // Убираем сантехнику и несуществующие id
       parsed.items = parsed.items.filter(item => {
         const exists = FURNITURE_CATALOG.find(f => f.id === item.catalogId)
         return exists && !SANITARY_IDS.has(item.catalogId)
       })
+
+      // Округляем углы до 0°, 90°, 180°, 270°
+      parsed.items = parsed.items.map(item => ({
+        ...item,
+        rotation: Math.round((item.rotation || 0) / (Math.PI / 2)) * (Math.PI / 2),
+      }))
     }
+
     return parsed
   } catch (e) {
     console.error('AI parse error:', e, text)
@@ -162,7 +166,9 @@ function AIDesigner({ apartmentId, onApply, isOpen, onClose, hasItems }) {
   const handleSend = async (text) => {
     const query = (text || prompt).trim()
     if (!query) return
-    setLoading(true); setError(null); setResult(null)
+    setLoading(true)
+    setError(null)
+    setResult(null)
     try {
       const res = await callClaude(query, apartmentId)
       if (res) setResult(res)
@@ -177,14 +183,17 @@ function AIDesigner({ apartmentId, onApply, isOpen, onClose, hasItems }) {
   const handleApply = () => {
     if (!result?.items) return
     onApply(result.items, replaceMode)
-    setResult(null); setPrompt('')
+    setResult(null)
+    setPrompt('')
   }
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ x: 320, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 320, opacity: 0 }}
+          initial={{ x: 320, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 320, opacity: 0 }}
           transition={{ duration: 0.25 }}
           className="w-80 h-full bg-zinc-950 border-l border-white/5 flex flex-col"
           style={{ boxShadow: '-8px 0 30px rgba(0,0,0,0.3)' }}
@@ -216,15 +225,19 @@ function AIDesigner({ apartmentId, onApply, isOpen, onClose, hasItems }) {
             {quickPrompts.map(q => (
               <button key={q} onClick={() => handleSend(q)} disabled={loading}
                 className="text-left text-sm px-3 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/5 hover:border-violet-500/30 text-zinc-400 hover:text-zinc-200 transition-all disabled:opacity-40"
-              >{q}</button>
+              >
+                {q}
+              </button>
             ))}
 
             {loading && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/5 mt-1">
                 <div className="flex gap-1">
-                  {[0,1,2].map(i => (
+                  {[0, 1, 2].map(i => (
                     <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-500"
-                      animate={{ y: [0,-4,0] }} transition={{ duration:0.6, delay:i*0.1, repeat:Infinity }}/>
+                      animate={{ y: [0, -4, 0] }}
+                      transition={{ duration: 0.6, delay: i * 0.1, repeat: Infinity }}
+                    />
                   ))}
                 </div>
                 <p className="text-zinc-500 text-xs">AI расставляет мебель...</p>
@@ -232,10 +245,14 @@ function AIDesigner({ apartmentId, onApply, isOpen, onClose, hasItems }) {
             )}
 
             {result && (
-              <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mt-1"
               >
-                <p className="text-emerald-400 text-xs font-medium mb-1">✓ Готово — {result.items?.length} предметов</p>
+                <p className="text-emerald-400 text-xs font-medium mb-1">
+                  Готово — {result.items?.length} предметов
+                </p>
                 <p className="text-zinc-400 text-xs leading-relaxed">{result.explanation}</p>
               </motion.div>
             )}
@@ -253,31 +270,49 @@ function AIDesigner({ apartmentId, onApply, isOpen, onClose, hasItems }) {
               <>
                 {hasItems && (
                   <div className="flex gap-1.5 mb-1">
-                    <button onClick={() => setReplaceMode(false)}
+                    <button
+                      onClick={() => setReplaceMode(false)}
                       className={`flex-1 py-1.5 rounded-lg text-xs transition-all ${!replaceMode ? 'bg-violet-600 text-white' : 'bg-white/5 text-zinc-500'}`}
-                    >Добавить</button>
-                    <button onClick={() => setReplaceMode(true)}
+                    >
+                      Добавить
+                    </button>
+                    <button
+                      onClick={() => setReplaceMode(true)}
                       className={`flex-1 py-1.5 rounded-lg text-xs transition-all ${replaceMode ? 'bg-orange-600 text-white' : 'bg-white/5 text-zinc-500'}`}
-                    >Заменить всё</button>
+                    >
+                      Заменить всё
+                    </button>
                   </div>
                 )}
-                <button onClick={handleApply}
+                <button
+                  onClick={handleApply}
                   className="w-full py-2.5 rounded-xl text-white font-medium text-sm hover:scale-[1.02] transition-all"
-                  style={{ background:'linear-gradient(135deg,#7c3aed,#a855f7)' }}
-                >Применить расстановку</button>
+                  style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}
+                >
+                  Применить расстановку
+                </button>
               </>
             )}
 
             <div className="flex gap-2 mt-1">
-              <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-                onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
                 placeholder="Опиши желаемый интерьер..."
                 className="flex-1 bg-white/[0.05] border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none resize-none focus:border-violet-500/50 transition-colors"
                 rows={2}
               />
-              <button onClick={() => handleSend()} disabled={loading || !prompt.trim()}
+              <button
+                onClick={() => handleSend()}
+                disabled={loading || !prompt.trim()}
                 className="w-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 hover:scale-105"
-                style={{ background:'linear-gradient(135deg,#7c3aed,#a855f7)' }}
+                style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)' }}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M14 2L7 9M14 2L9 14l-2-5-5-2 12-5z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
