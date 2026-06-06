@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, PointerLockControls, useProgress, Environment } from '@react-three/drei'
+import { OrbitControls, PointerLockControls, useProgress } from '@react-three/drei'
 import { useRef, Suspense, useEffect, useState, forwardRef, useImperativeHandle } from 'react'
 import { EffectComposer, SSAO, Bloom, Vignette } from '@react-three/postprocessing'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -17,21 +17,6 @@ const CAMERA = {
   firstPersonHeight: 1.6,
   firstPersonStart:  [0, 1.6, 0],
   firstPersonSpeed:  4,
-}
-
-// Цвет фона для каждого окружения
-const ENV_BG_COLORS = {
-  null:       '#f0ece4',
-  apartment:  '#e8ddd0',
-  city:       '#1a2030',
-  dawn:       '#c87040',
-  forest:     '#304020',
-  lobby:      '#d0c8b8',
-  night:      '#0a0a1a',
-  park:       '#7090a0',
-  studio:     '#e0e0e0',
-  sunset:     '#e06020',
-  warehouse:  '#806040',
 }
 
 function LoadingWatcher({ onProgress }) {
@@ -109,47 +94,34 @@ function SceneContent({
   apartmentId, mode, onExitFirstPerson, orbitRef,
   wallColor, ceilingColor, floorColor,
   bathroomWallColor, bathroomFloorColor,
-  onLoadProgress, measureActive, environmentPreset,
+  onLoadProgress, measureActive, customModelPath,
 }) {
   const { items, selectedId, deselect } = useEditorStore()
   const isViewer     = mode === 'viewer'
   const cameraLocked = (selectedId !== null || measureActive) && !isViewer
-  const modelPath    = apartmentId ? `/models/apartments/${apartmentId}.glb` : null
+  const modelPath    = customModelPath || (apartmentId ? `/models/apartments/${apartmentId}.glb` : null)
 
   return (
     <>
       <LoadingWatcher onProgress={onLoadProgress} />
 
-      {/* Окружение HDR — если выбрано */}
-      {environmentPreset ? (
-        <Environment
-          preset={environmentPreset}
-          background={isViewer} // показываем фон только в режиме просмотра
-          blur={0.6}            // размытие фона (не влияет на освещение)
-        />
-      ) : (
-        // Базовое освещение если нет окружения
-        <>
-          <ambientLight intensity={isViewer ? 1.0 : 0.8} color="#fff8f0" />
-          <directionalLight
-            position={[6, 8, 5]} intensity={isViewer ? 0.8 : 1.5} color="#fff5e0"
-            castShadow
-            shadow-mapSize={[1024, 1024]}
-            shadow-camera-near={0.5} shadow-camera-far={40}
-            shadow-camera-left={-12} shadow-camera-right={12}
-            shadow-camera-top={12}  shadow-camera-bottom={-12}
-            shadow-bias={-0.001} shadow-radius={4}
-          />
-          <directionalLight position={[-4, 5, -3]} intensity={0.3} color="#c8d8ff" />
-        </>
-      )}
+      <ambientLight intensity={isViewer ? 1.0 : 0.8} color="#fff8f0" />
+      <directionalLight
+        position={[6, 8, 5]} intensity={isViewer ? 0.8 : 1.5} color="#fff5e0"
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-near={0.5} shadow-camera-far={40}
+        shadow-camera-left={-12} shadow-camera-right={12}
+        shadow-camera-top={12}  shadow-camera-bottom={-12}
+        shadow-bias={-0.001} shadow-radius={4}
+      />
+      <directionalLight position={[-4, 5, -3]} intensity={0.3} color="#c8d8ff" />
 
-      {/* Дополнительное освещение в режиме просмотра */}
-      {isViewer && !environmentPreset && (
+      {isViewer && (
         <>
-          <pointLight position={[0,  2.2, 0]}  intensity={1.5} color="#ffedd5" distance={8} decay={2} />
-          <pointLight position={[4,  2.2, 0]}  intensity={1.2} color="#fff5e0" distance={6} decay={2} />
-          <pointLight position={[-3, 2.2, 0]}  intensity={1.0} color="#ffedd5" distance={6} decay={2} />
+          <pointLight position={[0,  2.2, 0]} intensity={1.5} color="#ffedd5" distance={8} decay={2} />
+          <pointLight position={[4,  2.2, 0]} intensity={1.2} color="#fff5e0" distance={6} decay={2} />
+          <pointLight position={[-3, 2.2, 0]} intensity={1.0} color="#ffedd5" distance={6} decay={2} />
         </>
       )}
 
@@ -196,7 +168,6 @@ function SceneContent({
   )
 }
 
-// Анимация перехода в режим от первого лица
 function FirstPersonTransition({ isTransitioning }) {
   return (
     <AnimatePresence>
@@ -258,7 +229,7 @@ function Scene({
   wallColor, ceilingColor, floorColor,
   bathroomWallColor, bathroomFloorColor,
   onLoadProgress, measureActive, containerRef,
-  environmentPreset,
+  customModelPath,
 }) {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [actualMode,      setActualMode]      = useState(mode)
@@ -281,7 +252,7 @@ function Scene({
   useEffect(() => {
     if (mode === 'viewer' && containerRef?.current) {
       const el = containerRef.current
-      if (el.requestFullscreen)       el.requestFullscreen().catch(() => {})
+      if (el.requestFullscreen)            el.requestFullscreen().catch(() => {})
       else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
     } else if (mode !== 'viewer') {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -295,8 +266,6 @@ function Scene({
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
   }
 
-  const bgColor = ENV_BG_COLORS[environmentPreset ?? 'null'] || '#f0ece4'
-
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
@@ -307,12 +276,12 @@ function Scene({
           position: CAMERA.startPosition,
           fov: actualMode === 'viewer' ? CAMERA.fovViewer : CAMERA.fovEditor,
         }}
-        style={{ background: bgColor }}
+        style={{ background: '#f0ece4' }}
         gl={{
           antialias: true,
           powerPreference: 'high-performance',
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: environmentPreset ? 0.8 : 1.0,
+          toneMappingExposure: 1.0,
           preserveDrawingBuffer: true,
         }}
         shadows="soft"
@@ -326,7 +295,7 @@ function Scene({
           bathroomWallColor={bathroomWallColor} bathroomFloorColor={bathroomFloorColor}
           onLoadProgress={onLoadProgress}
           measureActive={measureActive}
-          environmentPreset={environmentPreset}
+          customModelPath={customModelPath}
         />
       </Canvas>
       <FirstPersonTransition isTransitioning={isTransitioning} />

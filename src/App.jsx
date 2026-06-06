@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import Apartment from './pages/Apartment'
 import Editor from './pages/Editor'
+import CustomEditor from './pages/CustomEditor'
  
 function Layout() {
   const location = useLocation()
@@ -16,6 +17,7 @@ function Layout() {
         <Route path="/" element={<Home />} />
         <Route path="/catalog" element={<Catalog />} />
         <Route path="/apartment/:id" element={<Apartment />} />
+        <Route path="/editor/custom" element={<CustomEditor />} />
         <Route path="/editor/:id" element={<Editor />} />
       </Routes>
     </>

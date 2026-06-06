@@ -1,7 +1,7 @@
-import { useParams, Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { apartments } from '../data/apartments'
+import { customModelObjectUrl } from '../pages/Catalog'
 import Scene from '../components/three/Scene'
 import LoadingScreen from '../components/ui/LoadingScreen'
 import FurnitureCatalogModal from '../components/ui/FurnitureCatalogModal'
@@ -11,9 +11,19 @@ import { MeasureButton } from '../components/ui/MeasureTool'
 import { useEditorStore } from '../modules/editor/useEditorStore'
 import { useSiteTheme } from '../context/ThemeContext'
 
-function Editor() {
-  const { id }  = useParams()
-  const apt     = apartments.find(a => a.id === id)
+// Фиктивная квартира для расчётов
+const CUSTOM_APT = {
+  id: 'custom',
+  title: 'Своя планировка',
+  subtitle: '',
+  area: 50,
+  floor: null,
+  ceilingHeight: 2.7,
+  rooms_data: null,
+}
+
+function CustomEditor() {
+  const navigate   = useNavigate()
   const { isDark } = useSiteTheme()
 
   const {
@@ -40,12 +50,15 @@ function Editor() {
 
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
+  // Если нет модели — редиректим в каталог
   useEffect(() => {
-    if (!apt) return
+    if (!customModelObjectUrl) {
+      navigate('/catalog')
+      return
+    }
     setIsLoading(true)
-    setLoadProgress(0)
-    loadApartment(apt)
-  }, [apt?.id])
+    loadApartment(CUSTOM_APT)
+  }, [])
 
   const handleLoadProgress = (progress, active) => {
     setLoadProgress(progress)
@@ -65,8 +78,6 @@ function Editor() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [mode, measureActive, deleteItem, rotateItem])
 
-  const hasBathroom = apt?.id === 'apt-3room' || apt?.id === 'apt-3room2'
-
   const hdr   = isDark ? 'bg-zinc-950/90 border-white/5' : 'bg-white/90 border-zinc-200'
   const txt   = isDark ? 'text-white'    : 'text-zinc-900'
   const sub   = isDark ? 'text-zinc-400' : 'text-zinc-500'
@@ -75,15 +86,6 @@ function Editor() {
     ? 'bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/8'
     : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900 border border-zinc-200'
   const accent = isDark ? '#7c3aed' : '#f97316'
-
-  if (!apt) return (
-    <main className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-900'}`}>
-      <div className="text-center">
-        <p className={`mb-4 ${sub}`}>Квартира не найдена</p>
-        <Link to="/catalog" style={{ color: accent }}>Каталог</Link>
-      </div>
-    </main>
-  )
 
   return (
     <main className="h-screen flex flex-col overflow-hidden" style={{ background: isDark ? '#09090b' : '#f9f9f7' }}>
@@ -98,7 +100,7 @@ function Editor() {
       {/* ШАПКА */}
       <div className={`h-16 flex items-center justify-between px-6 border-b backdrop-blur-md z-10 shrink-0 ${hdr}`}>
         <div className="flex items-center gap-3">
-          <Link to={`/apartment/${apt.id}`} className={`${sub} hover:text-violet-400 transition-colors`}>
+          <Link to="/catalog" className={`${sub} hover:text-violet-400 transition-colors`}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -106,9 +108,7 @@ function Editor() {
           <div className={`w-px h-5 ${isDark ? 'bg-white/10' : 'bg-zinc-200'}`} />
           <div>
             <p className={`text-xs leading-none mb-0.5 ${sub}`}>редактор</p>
-            <p className={`text-sm font-semibold leading-none ${txt}`}>
-              {apt.title} {apt.subtitle} · {apt.area} м²
-            </p>
+            <p className={`text-sm font-semibold leading-none ${txt}`}>Своя планировка</p>
           </div>
         </div>
 
@@ -182,45 +182,25 @@ function Editor() {
                   {measureActive ? 'Режим замера' : 'Свойства'}
                 </p>
               </div>
-
               {measureActive ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3 text-center">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-orange-500/10">
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                      <path d="M2 20L20 2M4 18l3-3M9 13l3-3M14 8l3-3" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round"/>
-                      <path d="M2 15v5h5" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
                   <p className="text-sm text-orange-400 font-medium">Инструмент замера</p>
-                  <p className="text-xs text-zinc-600 leading-relaxed">Кликни две точки — появится расстояние и координаты X/Z</p>
-                  <p className="text-xs text-zinc-700">Esc — выйти</p>
+                  <p className="text-xs text-zinc-600 leading-relaxed">Кликни две точки — появится расстояние</p>
                   <button onClick={() => setMeasureActive(false)}
                     className="mt-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 text-xs transition-all"
-                  >Выйти из замера</button>
+                  >Выйти</button>
                 </div>
               ) : selectedId !== null ? (() => {
                 const item = items.find(i => i.id === selectedId)
                 if (!item) return null
                 return (
                   <div className="p-4 flex flex-col gap-3 flex-1 overflow-y-auto">
-                    <div className={`w-full rounded-xl overflow-hidden flex items-center justify-center ${isDark ? 'bg-white/5' : 'bg-zinc-50'}`}
-                      style={{ height: 140 }}>
-                      {item.icon
-                        ? <img src={item.icon} alt={item.title} className="w-full h-full object-contain p-3"/>
-                        : <div className="w-12 h-12 rounded-xl" style={{ backgroundColor: item.color }}/>
-                      }
+                    <div className={`w-full rounded-xl overflow-hidden flex items-center justify-center ${isDark ? 'bg-white/5' : 'bg-zinc-50'}`} style={{ height: 140 }}>
+                      {item.icon ? <img src={item.icon} alt={item.title} className="w-full h-full object-contain p-3"/> : <div className="w-12 h-12 rounded-xl" style={{ backgroundColor: item.color }}/>}
                     </div>
                     <p className={`font-semibold ${txt}`}>{item.title}</p>
-                    <div className={`text-xs space-y-1.5 p-3 rounded-xl ${isDark ? 'bg-white/[0.03]' : 'bg-zinc-50'}`}>
-                      <div className="flex justify-between"><span className={sub}>Ширина</span><span className={txt}>{item.size[0]} м</span></div>
-                      <div className="flex justify-between"><span className={sub}>Глубина</span><span className={txt}>{item.size[2]} м</span></div>
-                      <div className={`pt-1.5 mt-1.5 border-t ${isDark ? 'border-white/5' : 'border-zinc-100'}`}>
-                        <div className="flex justify-between"><span className={sub}>X</span><span className={txt}>{item.position[0].toFixed(2)}</span></div>
-                        <div className="flex justify-between mt-1"><span className={sub}>Z</span><span className={txt}>{item.position[2].toFixed(2)}</span></div>
-                      </div>
-                    </div>
                     <button onClick={() => rotateItem(selectedId)}
-                      className={`w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'}`}
+                      className={`w-full py-2.5 rounded-xl text-sm font-medium transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-zinc-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'}`}
                     >Повернуть (R)</button>
                     <button onClick={() => deleteItem(selectedId)}
                       className="w-full py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-sm font-medium text-red-400 transition-colors"
@@ -228,10 +208,8 @@ function Editor() {
                   </div>
                 )
               })() : (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
-                  <p className={`text-sm text-center ${isDark ? 'text-zinc-700' : 'text-zinc-400'}`}>
-                    Выбери предмет чтобы увидеть свойства
-                  </p>
+                <div className="flex-1 flex flex-col items-center justify-center p-6">
+                  <p className={`text-sm text-center ${isDark ? 'text-zinc-700' : 'text-zinc-400'}`}>Выбери предмет чтобы увидеть свойства</p>
                 </div>
               )}
             </motion.div>
@@ -242,7 +220,9 @@ function Editor() {
           style={{ right: mode === 'editor' ? '224px' : '0', transition: 'right 0.25s' }}
         >
           <Scene
-            apartmentId={apt.id} mode={mode}
+            apartmentId={null}
+            customModelPath={customModelObjectUrl}
+            mode={mode}
             onExitFirstPerson={() => setMode('editor')}
             orbitRef={orbitRef}
             wallColor={wallColor} ceilingColor={ceilingColor} floorColor={floorColor}
@@ -277,9 +257,7 @@ function Editor() {
                 <rect x="11" y="11" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.3"/>
               </svg>
               Расставить мебель
-              {items.length > 0 && (
-                <span className="bg-white/20 text-xs font-bold px-2 py-0.5 rounded-full">{items.length}</span>
-              )}
+              {items.length > 0 && <span className="bg-white/20 text-xs font-bold px-2 py-0.5 rounded-full">{items.length}</span>}
             </motion.button>
           )}
 
@@ -302,18 +280,10 @@ function Editor() {
           className="h-12 border-t border-white/5 bg-zinc-950/95 flex items-center justify-center gap-6 shrink-0"
         >
           <div className="flex items-center gap-5 text-xs text-zinc-400">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">{['W','A','S','D'].map(k => <kbd key={k} className="px-1.5 py-0.5 rounded bg-white/8 border border-white/10 font-mono text-zinc-300">{k}</kbd>)}</div>
-              <span className="text-zinc-600">движение</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/8 border border-white/10 font-mono text-zinc-300">мышь</kbd>
-              <span className="text-zinc-600">поворот</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/8 border border-white/10 font-mono text-zinc-300">Esc</kbd>
-              <span className="text-zinc-600">курсор</span>
-            </div>
+            <div className="flex gap-1">{['W','A','S','D'].map(k => <kbd key={k} className="px-1.5 py-0.5 rounded bg-white/8 border border-white/10 font-mono text-zinc-300">{k}</kbd>)}</div>
+            <span className="text-zinc-600">движение</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-white/8 border border-white/10 font-mono text-zinc-300">мышь</kbd>
+            <span className="text-zinc-600">поворот</span>
             <div className="w-px h-4 bg-white/10"/>
             <button onClick={() => setMode('editor')} className="text-violet-400 hover:text-violet-300 transition-colors">← выйти</button>
           </div>
@@ -327,18 +297,18 @@ function Editor() {
             bathroomWallColor={bathroomWallColor} bathroomFloorColor={bathroomFloorColor}
             onWallColor={setWallColor} onCeilingColor={setCeilingColor} onFloorColor={setFloorColor}
             onBathroomWallColor={setBathroomWallColor} onBathroomFloorColor={setBathroomFloorColor}
-            hasBathroom={hasBathroom}
+            hasBathroom={false}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {showCalc && (
-          <CalculationsModal isOpen={showCalc} onClose={() => setShowCalc(false)} items={items} apt={apt} canvasRef={canvasRef} />
+          <CalculationsModal isOpen={showCalc} onClose={() => setShowCalc(false)} items={items} apt={CUSTOM_APT} canvasRef={canvasRef} />
         )}
       </AnimatePresence>
     </main>
   )
 }
 
-export default Editor
+export default CustomEditor
