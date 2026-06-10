@@ -65,7 +65,12 @@ function Editor() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [mode, measureActive, deleteItem, rotateItem])
 
-  const hasBathroom = apt?.id === 'apt-3room' || apt?.id === 'apt-3room2'
+  const hasBathroom = [
+  'apt-1room', 'apt-1room-2', 'apt-1room-3',
+  'apt-2room', 'apt-2room-2', 'apt-2room-3',
+  'apt-studroom', 'apt-studroom-2', 'apt-studroom-3',
+  'apt-3room', 'apt-3room2', 'apt-3room-3',
+].includes(apt?.id)
 
   const hdr   = isDark ? 'bg-zinc-950/90 border-white/5' : 'bg-white/90 border-zinc-200'
   const txt   = isDark ? 'text-white'    : 'text-zinc-900'

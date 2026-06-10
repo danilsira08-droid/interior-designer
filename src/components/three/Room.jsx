@@ -4,7 +4,7 @@ import * as THREE from 'three'
 
 // ── OFFSETS ──────────────────────────────────────────────────────
 const APARTMENT_OFFSETS = {
-  'apt-1room':      -13.6,
+  'apt-1room':      0,
   'apt-1room-2':     0,
   'apt-1room-3':     0,   // подберёшь после первого запуска
   'apt-studroom':    0,

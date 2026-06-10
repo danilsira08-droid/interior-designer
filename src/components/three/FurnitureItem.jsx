@@ -3,17 +3,14 @@ import { useThree } from '@react-three/fiber'
 import { useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useEditorStore, SANITARY_IDS } from '../../modules/editor/useEditorStore'
-import { clampToApartment, isInBathroom } from '../../modules/editor/apartmentBounds'
+import { clampToApartment, isInBathroom, APARTMENT_BOUNDS } from '../../modules/editor/apartmentBounds'
 
-// Вычисляет реальный bbox загруженной сцены
 function SelectionOutline({ scene }) {
   const box    = new THREE.Box3().setFromObject(scene)
   const size   = new THREE.Vector3()
   const center = new THREE.Vector3()
   box.getSize(size)
   box.getCenter(center)
-
-  // center — локальные координаты внутри группы (уже с учётом поворота группы)
   return (
     <mesh position={[center.x, center.y, center.z]}>
       <boxGeometry args={[size.x + 0.05, size.y + 0.05, size.z + 0.05]} />
@@ -25,12 +22,7 @@ function SelectionOutline({ scene }) {
 function FurnitureModel({ modelPath, color, selected }) {
   const { scene } = useGLTF(modelPath)
   const cloned = useRef(null)
-
-  // Клонируем один раз
-  if (!cloned.current) {
-    cloned.current = scene.clone(true)
-  }
-
+  if (!cloned.current) cloned.current = scene.clone(true)
   return (
     <>
       <primitive object={cloned.current} />
@@ -71,9 +63,13 @@ export default function FurnitureItem({ item, interactive }) {
   const selected = selectedId === item.id
 
   const [bathroomWarning, setBathroomWarning] = useState(false)
-  const isDragging = useRef(false)
-  const dragPlane  = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
-  const dragOffset = useRef(new THREE.Vector3())
+  const isDragging  = useRef(false)
+  const dragPlane   = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+  const dragOffset  = useRef(new THREE.Vector3())
+
+  // Держим актуальный apartmentId в ref чтобы closure в onMove всегда видела свежее значение
+  const aptIdRef = useRef(currentApartmentId)
+  useEffect(() => { aptIdRef.current = currentApartmentId }, [currentApartmentId])
 
   const isSanitary = SANITARY_IDS.has(item.catalogId)
 
@@ -119,12 +115,14 @@ export default function FurnitureItem({ item, interactive }) {
       let newX = pos.x + dragOffset.current.x
       let newZ = pos.z + dragOffset.current.z
 
-      if (currentApartmentId) {
+      const aptId = aptIdRef.current
+
+      if (aptId && APARTMENT_BOUNDS[aptId]) {
         ;[newX, newZ] = clampToApartment(
           newX, newZ,
           item.size[0], item.size[2],
-          item.rotation,
-          currentApartmentId,
+          item.rotation || 0,
+          aptId,
         )
       }
 
@@ -162,7 +160,6 @@ export default function FurnitureItem({ item, interactive }) {
         }
       </Suspense>
 
-      {/* Предупреждение — сантехника не в санузле */}
       {bathroomWarning && (
         <Html center distanceFactor={8} position={[0, item.size[1] + 0.3, 0]}>
           <div style={{
